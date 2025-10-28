@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Testicular Short-Axis Symmetry Simulator — v4</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #111827;
+    --muted: #6b7280;
+    --grid: #e5e7eb;
+    --left: #2563eb;
+    --right: #10b981;
+    --torsed: #ef4444;
+    --f5: #065f46;
+    --f7: #7c3aed;
+  }
+  html, body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 20px; margin: 0 0 8px 0; }
+  h2 { font-size: 16px; margin: 20px 0 8px 0; }
+  .card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .controls label { display: block; font-size: 12px; color: var(--muted); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  input[type=range] { width: 100%; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { background: #111827; color: white; border: 0; border-radius: 10px; padding: 8px 10px; cursor: pointer; font-size: 12px; }
+  button.secondary { background: #374151; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 12px; color: var(--muted); }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  svg { user-select: none; }
+  .small { font-size: 12px; color: var(--muted); }
+  .row3 { display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 8px; }
+  .badge { display:inline-block; padding:2px 6px; border-radius:8px; font-size:12px; background:#f3f4f6; color:#111827; }
+
+/* Mobile-first scaling */
+svg { width: 100%; height: auto; max-width: 100%; }
+
+/* Touch targets */
+button { padding: 10px 12px; font-size: 14px; }
+input[type=range] { height: 28px; }
+
+/* Stack layout on narrow screens */
+@media (max-width: 680px) {
+  .wrap { margin: 12px auto; padding: 0 12px; }
+  .grid { grid-template-columns: 1fr; gap: 12px; }
+  .row { grid-template-columns: 1fr; gap: 10px; }
+  .card { padding: 12px; border-radius: 12px; }
+  h1 { font-size: 18px; }
+  h2 { font-size: 15px; }
+  .small { font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Testicular Short-Axis Symmetry Simulator — v4</h1>
+  <p class="small">Now with clearer symmetry lines, clinical summary rows, and data-driven example presets.</p>
+
+  <div class="grid">
+    <div class="card controls">
+      <h2>Dimensions</h2>
+      <div class="row">
+        <div>
+          <strong>Left testis</strong>
+          <label>Width (cm) <span id="lwVal"></span></label>
+          <input id="lw" type="range" min="1" max="3" step="0.01" value="1.30"/>
+          <label>Height (cm) <span id="lhVal"></span></label>
+          <input id="lh" type="range" min="1" max="3" step="0.01" value="1.15"/>
+          <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <button id="torsL" class="secondary">Torsion-like (Left)</button>
+          </div>
+        </div>
+        <div>
+          <strong>Right testis</strong>
+          <label>Width (cm) <span id="rwVal"></span></label>
+          <input id="rw" type="range" min="1" max="3" step="0.01" value="1.35"/>
+          <label>Height (cm) <span id="rhVal"></span></label>
+          <input id="rh" type="range" min="1" max="3" step="0.01" value="1.20"/>
+          <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <button id="torsR" class="secondary">Torsion-like (Right)</button>
+          </div>
+        </div>
+      </div>
+
+      <h2>Data-driven presets</h2>
+      <div class="btns">
+        <button id="preset_tors">Surgically confirmed torsion (examples)</button>
+        <button id="preset_f5" class="secondary">Alternative non‑torsion pathology (examples)</button>
+        <button id="preset_f7" class="secondary">Normal/negative testes (examples)</button>
+        <button id="reset" class="secondary">Reset</button>
+      </div>
+      <p class="small">Each click samples one of 10 examples from each patient group.</p>
+    </div>
+
+    <div class="card">
+      <h2>Short-axis cross-sections</h2>
+<div class="row3">
+                <div>Which looks more spherical based on <b>aspect ratio</b>? <span id="pickAR" class="badge">N/A</span></div>
+        <div>Torsion laterality: <span id="actual" class="badge">N/A</span></div>
+      </div>
+      <svg id="ellipses" width="620" viewBox="0 0 620 320" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.15"/>
+          </filter>
+          <linearGradient id="gradLeft" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2563eb" stop-opacity="0.20"/>
+            <stop offset="100%" stop-color="#2563eb" stop-opacity="0.07"/>
+          </linearGradient>
+          <linearGradient id="gradRight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#10b981" stop-opacity="0.20"/>
+            <stop offset="100%" stop-color="#10b981" stop-opacity="0.07"/>
+          </linearGradient>
+        </defs>
+        <g id="gLeft"></g>
+        <g id="gRight"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--left)"></span>Left</span>
+        <span><span class="swatch" style="background:var(--right)"></span>Right</span>
+      </div>
+      <div class="small" id="meta"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Agreement plot (Small vs Large Testis AR)</h2>
+    <div class="legend">
+      <span><span class="swatch" style="background:#9ca3af"></span>Identity y=x</span>
+      <span><span class="swatch" style="background:var(--torsed)"></span>Surgically Confirmed Torsion — Line of symmetry</span>
+      <span><span class="swatch" style="background:var(--f5)"></span>Alternative Pathology — Line of symmetry</span>
+      <span><span class="swatch" style="background:var(--f7)"></span>Normal/Negative Patients — Line of symmetry</span>
+    </div>
+    <svg id="agree" width="540" viewBox="0 0 540 540" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+</div>
+
+<script>
+const PRESETS_T = [{"lw":1.5,"lh":1.3,"rw":1.4,"rh":1.0,"side":"Left"},{"lw":2.0,"lh":2.8,"rw":2.8,"rh":2.8,"side":"Right"},{"lw":2.51,"lh":2.56,"rw":2.11,"rh":2.72,"side":"Left"},{"lw":2.1,"lh":2.6,"rw":2.7,"rh":2.6,"side":"Right"},{"lw":2.8,"lh":2.3,"rw":2.8,"rh":2.6,"side":"Left"},{"lw":2.3,"lh":2.5,"rw":1.9,"rh":1.8,"side":"Left"},{"lw":2.4,"lh":2.4,"rw":2.0,"rh":2.4,"side":"Left"},{"lw":2.5,"lh":1.6,"rw":3.6,"rh":2.6,"side":"Right"},{"lw":1.8,"lh":2.3,"rw":1.3,"rh":2.4,"side":"Left"}];
+const PRESETS_5 = [{"lw":2.6,"lh":2.3,"rw":2.9,"rh":2.5},{"lw":1.1,"lh":1.4,"rw":1.0,"rh":1.5},{"lw":1.4,"lh":1.9,"rw":1.4,"rh":2.3},{"lw":2.6,"lh":2.4,"rw":2.8,"rh":2.6},{"lw":1.8,"lh":2.2,"rw":2.0,"rh":2.5},{"lw":1.2,"lh":1.0,"rw":1.3,"rh":1.0},{"lw":1.0,"lh":1.35,"rw":1.0,"rh":1.18},{"lw":1.2,"lh":1.2,"rw":1.2,"rh":1.2},{"lw":2.3,"lh":2.7,"rw":2.3,"rh":2.7},{"lw":1.2,"lh":1.5,"rw":1.3,"rh":1.6}];
+const PRESETS_7 = [{"lw":1.7,"lh":2.2,"rw":1.6,"rh":2.0},{"lw":1.0,"lh":1.1,"rw":1.0,"rh":1.0},{"lw":1.0,"lh":1.0,"rw":1.0,"rh":1.0},{"lw":2.0,"lh":2.4,"rw":2.2,"rh":2.7},{"lw":1.3,"lh":1.0,"rw":1.0,"rh":1.0},{"lw":2.8,"lh":2.7,"rw":2.4,"rh":2.8},{"lw":1.3,"lh":1.5,"rw":1.2,"rh":1.5},{"lw":1.5,"lh":1.4,"rw":1.3,"rh":1.6},{"lw":2.9,"lh":2.3,"rw":2.7,"rh":2.2},{"lw":2.7,"lh":1.9,"rw":2.6,"rh":1.9}];
+
+const SLOPE_T = 0.356280;
+const SLOPE_5 = 0.761239;
+const SLOPE_7 = 0.765944;
+
+let lastPreset = null; // 'torsed' | 'f5' | 'f7' | null
+let currentPreset = null;
+
+function ar(w,h) { return Math.max(w,h) / Math.max(1e-9, Math.min(w,h)); }
+function area(w,h) { return w*h; }
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function dimsForAR(targetAR, s) { const small=s; const large=s*targetAR; return [large, small]; }
+
+const lw = document.getElementById('lw');
+const lh = document.getElementById('lh');
+const rw = document.getElementById('rw');
+const rh = document.getElementById('rh');
+const lwVal = document.getElementById('lwVal');
+const lhVal = document.getElementById('lhVal');
+const rwVal = document.getElementById('rwVal');
+const rhVal = document.getElementById('rhVal');
+
+const gLeft = document.getElementById('gLeft');
+const gRight = document.getElementById('gRight');
+const meta = document.getElementById('meta');
+const svgAgree = document.getElementById('agree');
+
+const badgeAR = document.getElementById('pickAR');
+const badgeActual = document.getElementById('actual');
+
+function drawEllipseGroup(g, cx, cy, w, h, color, fillId) {
+  g.innerHTML = '';
+  const scale = 60;
+  const rx = 0.5 * w * scale;
+  const ry = 0.5 * h * scale;
+
+  const e = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+  e.setAttribute('cx', cx); e.setAttribute('cy', cy);
+  e.setAttribute('rx', rx); e.setAttribute('ry', ry);
+  e.setAttribute('fill', `url(#${fillId})`);
+  e.setAttribute('stroke', color); e.setAttribute('stroke-width', '2');
+  e.setAttribute('filter', 'url(#shadow)');
+  g.appendChild(e);
+
+  const yLine = cy + ry + 10;
+  const x1 = cx - rx, x2 = cx + rx;
+  const dw = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  dw.setAttribute('x1', x1); dw.setAttribute('y1', yLine);
+  dw.setAttribute('x2', x2); dw.setAttribute('y2', yLine);
+  dw.setAttribute('stroke', '#6b7280'); dw.setAttribute('stroke-width', '2');
+  g.appendChild(dw);
+  const tw = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  tw.setAttribute('x', cx); tw.setAttribute('y', yLine + 18);
+  tw.setAttribute('text-anchor', 'middle'); tw.setAttribute('fill', '#374151'); tw.setAttribute('font-size', '12');
+  tw.textContent = `width = ${w.toFixed(2)} cm`;
+  g.appendChild(tw);
+
+  const xLine = cx + rx + 10;
+  const y1 = cy - ry, y2 = cy + ry;
+  const dh = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  dh.setAttribute('x1', xLine); dh.setAttribute('y1', y1);
+  dh.setAttribute('x2', xLine); dh.setAttribute('y2', y2);
+  dh.setAttribute('stroke', '#6b7280'); dh.setAttribute('stroke-width', '2');
+  g.appendChild(dh);
+  const th = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  th.setAttribute('x', xLine + 8); th.setAttribute('y', cy + 4);
+  th.setAttribute('fill', '#374151'); th.setAttribute('font-size', '12');
+  th.textContent = `height = ${h.toFixed(2)} cm`;
+  g.appendChild(th);
+}
+
+function drawAgree(L, J) {
+  svgAgree.innerHTML = '';
+  const size = 540, pad = 54, s = size - 2*pad;
+  const grid = '#e5e7eb', text = '#6b7280';
+
+  for (let i=0;i<=8;i++) {
+    const t = i*0.25;
+    const gx = pad + (t/2)*s;
+    const gy = pad + (1 - t/2)*s;
+    const lh = document.createElementNS('http://www.w3.org/2000/svg','line');
+    lh.setAttribute('x1', pad); lh.setAttribute('y1', gy);
+    lh.setAttribute('x2', pad+s); lh.setAttribute('y2', gy);
+    lh.setAttribute('stroke', grid); svgAgree.appendChild(lh);
+    const lv = document.createElementNS('http://www.w3.org/2000/svg','line');
+    lv.setAttribute('x1', gx); lv.setAttribute('y1', pad);
+    lv.setAttribute('x2', gx); lv.setAttribute('y2', pad+s);
+    lv.setAttribute('stroke', grid); svgAgree.appendChild(lv);
+    const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+    tx.setAttribute('x', gx); tx.setAttribute('y', pad+s+18);
+    tx.setAttribute('text-anchor','middle'); tx.setAttribute('fill', text); tx.setAttribute('font-size','12');
+    tx.textContent = t.toFixed(2); svgAgree.appendChild(tx);
+    const ty = document.createElementNS('http://www.w3.org/2000/svg','text');
+    ty.setAttribute('x', pad-10); ty.setAttribute('y', gy+4);
+    ty.setAttribute('text-anchor','end'); ty.setAttribute('fill', text); ty.setAttribute('font-size','12');
+    ty.textContent = t.toFixed(2); svgAgree.appendChild(ty);
+  }
+  const xl = document.createElementNS('http://www.w3.org/2000/svg','text');
+  xl.setAttribute('x', pad+s/2); xl.setAttribute('y', size-10);
+  xl.setAttribute('text-anchor','middle'); xl.textContent = 'Small Testis AR − 1'; svgAgree.appendChild(xl);
+  const yl = document.createElementNS('http://www.w3.org/2000/svg','text');
+  yl.setAttribute('transform', `translate(16, ${pad+s/2}) rotate(-90)`);
+  yl.setAttribute('text-anchor','middle'); yl.textContent = 'Large Testis AR − 1'; svgAgree.appendChild(yl);
+
+  const X = v => pad + (v/2)*s;
+  const Y = v => pad + (1 - v/2)*s;
+
+  let id = document.createElementNS('http://www.w3.org/2000/svg','line');
+  id.setAttribute('x1', X(0)); id.setAttribute('y1', Y(0));
+  id.setAttribute('x2', X(2)); id.setAttribute('y2', Y(2));
+  id.setAttribute('stroke', '#9ca3af'); id.setAttribute('stroke-dasharray','6 6'); id.setAttribute('stroke-width','2');
+  svgAgree.appendChild(id);
+
+  function slopeLine(m, color, dash='4 3', width=2) {
+    const x2 = 2; const y2 = Math.min(2, m*2);
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1', X(0)); l.setAttribute('y1', Y(0));
+    l.setAttribute('x2', X(x2)); l.setAttribute('y2', Y(y2));
+    l.setAttribute('stroke', color); l.setAttribute('stroke-width', width); l.setAttribute('stroke-dasharray', dash);
+    svgAgree.appendChild(l);
+  }
+  slopeLine(parseFloat(SLOPE_T), 'var(--torsed)', '6 2', 2.5);
+  slopeLine(parseFloat(SLOPE_5), 'var(--f5)', '2 2', 2.0);
+  slopeLine(parseFloat(SLOPE_7), 'var(--f7)', '8 3 2 3', 2.0);
+
+  const cx = X(Math.max(0, Math.min(2, L-1)));
+  const cy = Y(Math.max(0, Math.min(2, J-1)));
+  const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('r', 6);
+  dot.setAttribute('fill', '#111827'); svgAgree.appendChild(dot);
+}
+
+function update() {
+  const lwv = parseFloat(lw.value), lhv = parseFloat(lh.value);
+  const rwv = parseFloat(rw.value), rhv = parseFloat(rh.value);
+  lwVal.textContent = lwv.toFixed(2) + ' cm';
+  lhVal.textContent = lhv.toFixed(2) + ' cm';
+  rwVal.textContent = rwv.toFixed(2) + ' cm';
+  rhVal.textContent = rhv.toFixed(2) + ' cm';
+
+  drawEllipseGroup(gLeft, 210, 150, lwv, lhv, 'var(--left)', 'gradLeft');
+  drawEllipseGroup(gRight, 410, 150, rwv, rhv, 'var(--right)', 'gradRight');
+
+  const arL = Math.max(lwv, lhv) / Math.min(lwv, lhv);
+  const arR = Math.max(rwv, rhv) / Math.min(rwv, rhv);
+  const aL = lwv*lhv, aR = rwv*rhv;
+  const smallerIsLeft = aL <= aR;
+  const Lval = smallerIsLeft ? arL : arR;
+  const Jval = smallerIsLeft ? arR : arL;
+  meta.textContent = `Left AR=${arL.toFixed(3)}  |  Right AR=${arR.toFixed(3)}  |  Areas (cm²): L=${aL.toFixed(2)}, R=${aR.toFixed(2)}  |  Smaller-by-area: ${smallerIsLeft ? 'Left' : 'Right'}`;
+
+  badgeAR.textContent = (arL < arR ? 'Left' : (arR < arL ? 'Right' : 'Tie'));
+  if (lastPreset === 'torsed') { const p = currentPreset || {}; badgeActual.textContent = 'Torsion (' + (p.side || '?') + ')'; }
+  else if (lastPreset === 'f5') badgeActual.textContent = 'Alternative pathology';
+  else if (lastPreset === 'f7') badgeActual.textContent = 'Normal/Negative scan';
+  else badgeActual.textContent = 'N/A';
+
+  drawAgree(Lval, Jval);
+}
+
+function pickRandom(presets) { return presets[Math.floor(Math.random() * presets.length)]; }
+function applyPreset(p, which) {
+  currentPreset = p;
+  lastPreset = which;
+  lw.value = p.lw.toFixed(2); lh.value = p.lh.toFixed(2);
+  rw.value = p.rw.toFixed(2); rh.value = p.rh.toFixed(2);
+  update();
+}
+
+function applyTorsionLike(side) {
+  lastPreset = null;
+  const targetAR = 1.12;
+  if (side === 'L') {
+    const short = Math.min(parseFloat(lw.value), parseFloat(lh.value));
+    let w = short*targetAR, h = short;
+    lw.value = Math.min(3, Math.max(1, w)).toFixed(2);
+    lh.value = Math.min(3, Math.max(1, h)).toFixed(2);
+  } else {
+    const short = Math.min(parseFloat(rw.value), parseFloat(rh.value));
+    let w = short*targetAR, h = short;
+    rw.value = Math.min(3, Math.max(1, w)).toFixed(2);
+    rh.value = Math.min(3, Math.max(1, h)).toFixed(2);
+  }
+  update();
+}
+
+[lw, lh, rw, rh].forEach(el => el.addEventListener('input', () => { lastPreset = null; currentPreset = null; update(); }));
+document.getElementById('torsL').addEventListener('click', () => applyTorsionLike('L'));
+document.getElementById('torsR').addEventListener('click', () => applyTorsionLike('R'));
+document.getElementById('preset_tors').addEventListener('click', () => applyPreset(PRESETS_T[Math.floor(Math.random()*PRESETS_T.length)], 'torsed'));
+document.getElementById('preset_f5').addEventListener('click', () => applyPreset(PRESETS_5[Math.floor(Math.random()*PRESETS_5.length)], 'f5'));
+document.getElementById('preset_f7').addEventListener('click', () => applyPreset(PRESETS_7[Math.floor(Math.random()*PRESETS_7.length)], 'f7'));
+document.getElementById('reset').addEventListener('click', () => { lastPreset = null; currentPreset = null; lw.value=1.30; lh.value=1.15; rw.value=1.35; rh.value=1.20; update(); });
+
+update();
+</script>
+</body>
+</html>
